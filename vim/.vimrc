@@ -61,6 +61,7 @@ Plug 'xuyuanp/nerdtree-git-plugin'    " Show status of files in NerdTree
 Plug 'tmux-plugins/vim-tmux-focus-events'
 Plug 'roxma/vim-tmux-clipboard'
 Plug 'christoomey/vim-tmux-navigator'
+" VIM Ui
 
 
 " Autocomplete
@@ -312,7 +313,7 @@ autocmd BufNewFile,BufRead *.yml.j2 set syntax=yaml   "Jinja yml (mostly for Ans
 " =============================================================================
 
 " toggle between number and relativenumber
-function! ToggleNumber()
+function! ToggleLineNumber()
     if(&relativenumber == 1)
         set norelativenumber
         set number
@@ -321,30 +322,66 @@ function! ToggleNumber()
     endif
 endfunc
 
-" strips trailing whitespace at the end of files. this
-" is called on buffer write in the autogroup above.
-function! <SID>StripTrailingWhitespaces()
-    " save last search & cursor position
-    let _s=@/
-    let l = line(".")
-    let c = col(".")
-    %s/\s\+$//e
-    let @/=_s
-    call cursor(l, c)
-endfunction
+function! ToggleALEFix()
+    if(g:ale_fix_on_save == 1)
+        let g:ale_fix_on_save = 0
+    else
+        let g:ale_fix_on_save = 1
+    endif
+endfunc
 
+function! ToggleZoom(toggle)
+  if exists("t:restore_zoom") && (t:restore_zoom.win != winnr() || a:toggle == v:true)
+      exec t:restore_zoom.cmd
+      unlet t:restore_zoom
+  elseif a:toggle
+      let t:restore_zoom = { 'win': winnr(), 'cmd': winrestcmd() }
+      vert resize | resize
+  endi
+endfunction
+augroup restorezoom
+    au WinEnter * silent! :call ToggleZoom(v:false)
+augroup END
+
+
+command! LineNumberToggle call ToggleLineNumber()
+command! ALEfixToggle call ToggleALEFix()
+
+
+" To apply the macro to all lines you need a little trick I learned from Drew Neil’s
+" awesome book practical vim. Add the following script (visual-at.vim) to your vim
+" configuration. This allows you to visually select a section and then hit @ to run a
+" macro on all lines. Only lines which match will change. Without this script the
+" macro would stop at lines which don’t match the macro.
+function! ExecuteMacroOverVisualRange()
+  echo "@".getcmdline()
+  execute ":'<,'>normal @".nr2char(getchar())
+endfunction
+xnoremap @ :<C-u>call ExecuteMacroOverVisualRange()<CR>
 " =============================================================================
 "   PLUGIN CONFIG
 " =============================================================================
 "
 " META: Disabled by default
 let g:gitgutter_enabled = 0          " vim-gitgutter
-let g:ale_enabled = 0                " ale
 let g:indentLine_enabled = 0         " indentline
 let g:SignatureEnabledAtStartup = 0  " vim-signature
 let g:startify_custom_header =[]     " Disable startify header
 " Enabled by default
 let g:rainbow_active = 1
+
+
+" ALE
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+" Set this variable to 1 to fix files when you save them.
+let g:ale_enabled = 1
+let g:ale_lint_on_save = 1
+let g:ale_fix_on_save = 1
+let g:ale_fixers = {
+    \   '*': ['remove_trailing_lines', 'trim_whitespace'],
+    \}
+nmap <silent> [a <Plug>(ale_previous_wrap)
+nmap <silent> ]a <Plug>(ale_next_wrap)
 
 
 " Lightline
@@ -406,13 +443,22 @@ let g:lightline.component_expand = {
       \  'linter_ok': 'lightline#ale#ok',
       \ }
 
-" Nerdfont indicators
-" let g:lightline#ale#indicator_checking = "\uf110"
-" let g:lightline#ale#indicator_infos = "\uf129"
-" let g:lightline#ale#indicator_warnings = "\uf071"
-" let g:lightline#ale#indicator_errors = "\uf05e"
-" let g:lightline#ale#indicator_ok = "\uf00c"
-"
+    " vim-easymotion disturbs diagnostics
+    " See https://github.com/neoclide/coc.nvim/issues/110
+    " let g:easymotion#is_active = 0
+    " function! EasyMotionCoc() abort
+    "   if EasyMotion#is_active()
+    "     let g:easymotion#is_active = 1
+    "     CocDisable
+    "   else
+    "     if g:easymotion#is_active == 1
+    "       let g:easymotion#is_active = 0
+    "       CocEnable
+    "     endif
+    "   endif
+    " endfunction
+    " autocmd TextChanged,CursorMoved * call EasyMotionCoc()
+
 endif
 
 " Easymotion
@@ -473,7 +519,7 @@ nmap ghp <Plug>(GitGutterPreviewHunk)
 """""""""""""""""""""""""""""""""""""""""""""""""""""""
 nnoremap <C-g> :Goyo<CR>
 map <C-p> :Files<CR>
-map <C-h> :History:<CR>
+map <C-h> :History<CR>
 
 " Leader
 """""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -492,9 +538,9 @@ nnoremap <Leader>- :sp<CR>
 nnoremap <Leader>\| :vsp<CR>
 
 "  w wq q   --  Quick Save
-nmap <Leader>w :call <SID>StripTrailingWhitespaces()<CR>:w<CR>
+nmap <Leader>w :w<CR>
 nmap <Leader>q :q<CR>
-nmap <Leader>wq :call <SID>StripTrailingWhitespaces()<CR>:wq<CR>
+nmap <Leader>wq :wq<CR>
 
 "  y d p P   --  Quick copy paste into system clipboard
 nmap <Leader>y "+y
@@ -509,7 +555,7 @@ vmap <Leader>P "+P
 "  e g H -- FZF
 nnoremap <Leader>g :Rg<CR>
 nnoremap <Leader>e :Files<CR>
-nnoremap <Leader>H :History:<CR>
+nnoremap <Leader>H :History<CR>
 
 " hjkl  s j k t / ? g/   -- EasyMotion
 map <Leader>h <Plug>(easymotion-linebackward)
@@ -535,16 +581,22 @@ map <Leader>g/ <Plug>(incsearch-easymotion-stay)
 " nnoremap <Leader>u :GundoToggle<CR>
 nnoremap <Leader>u :MundoToggle<CR>
 
-"  oa oe og om on op ot os    --  Miscellaneous toggles
+"  oa oc oe ofog om on op ot os    --  Miscellaneous toggles
 nnoremap <Leader>oa :ALEToggle<CR>
+nnoremap <Leader>oc :ColorToggle<CR>
 nnoremap <Leader>oe :NERDTreeToggle<CR>
+nnoremap <Leader>of :ALEfixToggle<CR>
 nnoremap <Leader>og :GitGutterToggle<CR>
 nnoremap <Leader>om :SignatureToggle<CR>
-nnoremap <Leader>on :call ToggleNumber()<CR>
+nnoremap <Leader>on :LineNumberToggle<CR>
 nnoremap <Leader>op :RainbowToggle<CR>
 nnoremap <Leader>ot :Vista!!<CR>
 nnoremap <Leader>os :setlocal spell! spelllang=en_us<CR>
 " nnoremap <Leader>nf :NERDTreeFind<CR>
+
+
+"  z   -- Toggle Pane Zoom
+nnoremap <silent> <Leader>+ :call ToggleZoom(v:true)<CR>
 
 " `  `v  `z  rv  -- edit vimrc/zshrc and load vimrc bindings
 nnoremap <Leader>` :Startify<CR>
@@ -559,25 +611,45 @@ nnoremap <Leader>rv :source ~/.vimrc<CR>
 nnoremap <Leader>aw :ArgWrap<CR>
 
 
-" rn F a ac af   -- Conquer of Completion
+" rn F a ac af U -- Conquer of Completion
 """""""""""""""""""""""""""""""""""""""""""""""""""""""
 if exists('g:coc_custom_config')
     " Symbol renaming.
     nmap <leader>rn <Plug>(coc-rename)
 
+    nmap <Leader>! :<C-u>CocList diagnostics<CR>
+
+    " TODO figure out
     " Formatting selected code.
-    xmap <leader>F  <Plug>(coc-format-selected)
-    nmap <leader>F  <Plug>(coc-format-selected)
+    " xmap <leader>F  <Plug>(coc-format-selected)
+    " nmap <leader>F  <Plug>(coc-format-selected)
     " Applying codeAction to the selected region.
     " Example: `<leader>aap` for current paragraph
-    xmap <leader>a  <Plug>(coc-codeaction-selected)
-    nmap <leader>a  <Plug>(coc-codeaction-selected)
+    " xmap <leader>a  <Plug>(coc-codeaction-selected)
+    " nmap <leader>a  <Plug>(coc-codeaction-selected)
 
     " Remap keys for applying codeAction to the current buffer.
-    nmap <leader>ac  <Plug>(coc-codeaction)
+    " nmap <leader>ac  <Plug>(coc-codeaction)
     " Apply AutoFix to problem on the current line.
-    nmap <leader>af  <Plug>(coc-fix-current)
+    " nmap <leader>af  <Plug>(coc-fix-current)
 
+    """"""""""""" Coc-Git
+    " Undo git chunk (closest to linewise undo)
+    nmap <Leader>U :CocCommand git.chunkUndo<CR>
+    " Toggle GitGutter
+    nmap <Leader>og :CocCommand git.toggleGutters<CR>
+    " " navigate chunks of current buffer
+    nmap [c <Plug>(coc-git-prevchunk)
+    nmap ]c <Plug>(coc-git-nextchunk)
+    " show chunk diff at current position
+    nmap gs <Plug>(coc-git-chunkinfo)
+    " show commit contains current position
+    nmap gc <Plug>(coc-git-commit)
+    " " create text object for git chunks
+    omap ig <Plug>(coc-git-chunk-inner)
+    xmap ig <Plug>(coc-git-chunk-inner)
+    omap ag <Plug>(coc-git-chunk-outer)
+    xmap ag <Plug>(coc-git-chunk-outer)
 endif
 
 " nnoremap <Leader>s :call <SID>StripTrailingWhitespaces()<CR>
@@ -604,6 +676,3 @@ let $LOCALFILE=expand("~/.vimrc_local")
 if filereadable($LOCALFILE)
     source $LOCALFILE
 endif
-
-
-
